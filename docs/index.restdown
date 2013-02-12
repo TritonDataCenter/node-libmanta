@@ -1,0 +1,101 @@
+---
+title: libmanta
+markdown2extras: wiki-tables, code-friendly
+apisections:
+---
+
+# Mahi
+
+This package contains a node client for communicating with Mahi, which is the
+authentication/identity cache that Manta maintains in redis.
+
+## createMahiClient(options)
+
+Creates a client, and emits 'connect' when the client has established a
+connection to redis.  Note that the `createMahiClient` call will handle DNS
+resolution and retry/backoff logic, and maintains a local in-memory cache, so
+that most common things are handled for you, and you can just directly use this
+client.
+
+    var libmanta = require('libmanta');
+
+	var opts = {
+        host: process.env.MAHI_HOST,
+        log: bunyan.createLogger({
+		    name: 'mahi',
+			stream: process.stdout,
+			level: 'info',
+			serializers: bunyan.stdSerializers
+        });
+    };
+    var mahi = libmanta.createMahiClient(opts);
+    mahi.once('error', function (err) {
+	    console.error(err.toString());
+	    process.exit(1);
+    });
+    mahi.once('connect', function () {
+	    ...
+    });
+
+The options that can be passed in at construct time:
+
+||**Name**||**JS Type**||**Required**||**Description**||
+||cache||Object||No||params to pass to [lru-cache](https://github.com/isaacs/node-lru-cache)||
+||connectTimeout||Number||No||amount of milliseconds to wait for acquiring a socket to redis||
+||host||String||Yes||IP/DNS name of redis host||
+||log||Object||Yes||[bunyan](https://github.com/trentm/node-bunyan) logger||
+||maxTimeout||Number||No||Maximum amount of time between retries||
+||minTimeout||Number||No||Minimum amount of time before first retry||
+||port||Number||No||Redis port||
+||redis_options||Object||No||params to pass to [node_redis](https://github.com/mranney/node_redis)||
+||retries||Number||No||Number of times to attempt establishing a connection||
+
+
+## mahi.userFromLogin(login, [opts], cb)
+
+Loads a user record as a JS object given the login name.
+
+    mahi.userFromLogin('poseidon', function (err, user) {
+	    assert.ifError(err);
+		console.log('%j', user);
+    });
+
+The returned `user` object will look like:
+
+    {
+        uuid: '56f237ac-8cb0-4468-896f-5aa00ff8ffc9',
+        groups: [ 'operators' ],
+        keys: {
+            '24:ae:9d:...': 'PEM ENCODED PUBLIC KEY'
+        },
+        login: 'poseidon'
+    }
+
+Note that keys will not be the SSH public key, but rather the OpenSSL-friendly PEM.
+
+The `opts` param is only if you wish to override the logger.
+
+## mahi.userFromUUID(uuid, [opts], cb)
+
+Loads a user record as a JS object given the UUID.
+
+    var uuid = '56f237ac-8cb0-4468-896f-5aa00ff8ffc9';
+    mahi.userFromUUID(uuid, function (err, user) {
+	    assert.ifError(err);
+		console.log('%j', user);
+    });
+
+The returned `user` object will look like:
+
+    {
+        uuid: '56f237ac-8cb0-4468-896f-5aa00ff8ffc9',
+        groups: [ 'operators' ],
+        keys: {
+            '24:ae:9d:...': 'PEM ENCODED PUBLIC KEY'
+        },
+        login: 'poseidon'
+    }
+
+Note that keys will not be the SSH public key, but rather the OpenSSL-friendly PEM.
+
+The `opts` param is only if you wish to override the logger.
