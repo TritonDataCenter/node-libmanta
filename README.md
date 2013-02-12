@@ -10,4 +10,5 @@ Tickets/bugs: <https://devhub.joyent.com/jira/browse/MANTA>
 # Overview
 
 This repo serves to hold any/all common code that is shared between Manta
-components.
+components.  Currently only a [mahi](https://mo.joyent.com/docs/mahi) client
+exists.
