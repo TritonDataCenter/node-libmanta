@@ -99,3 +99,56 @@ The returned `user` object will look like:
 Note that keys will not be the SSH public key, but rather the OpenSSL-friendly PEM.
 
 The `opts` param is only if you wish to override the logger.
+
+# Queue
+
+libmanta contains an alternate `queue` implementation, similar to the one in
+[vasync](https://github.com/davepacheco/node-vasync), except that this queue is
+intended to be short-lived, and ended.  There are several places in manta that
+need a queue that lasts for some burst of requests (essentially using it as a
+temporary throttle).  The usage of this is very simple; you push onto the queue,
+and then `close` it.  When you get an `end` event, you're done.
+
+    var fs = require('fs');
+
+    var bytes = 0;
+    var q = libmanta.createQueue({
+	    limit: 10,  // allow at most 10 parallel runners
+	    worker: function stat(p, cb) {
+		    fs.stat(p, function (err, stats) {
+			    if (err) {
+				    cb(err); // q will emit error
+					return;
+                }
+
+				if (stats.isFile())
+				    bytes += stats.size;
+
+                cb();
+			});
+        }
+    });
+
+    q.on('error', function (err) {
+	    console.error('stat error: %s', err.stack);
+    });
+
+    q.once('end', function () {
+	    console.log('/tmp uses %d bytes', bytes);
+    });
+
+    fs.readdir('/tmp', function (err, files) {
+        assert.ifError(err);
+		files.forEach(function (f) {
+            q.push('/tmp/' + f);
+        });
+        q.close();
+    });
+
+Options that can be passed at construct time:
+
+||**Name**||**JS Type**||**Required**||**Description**||
+||limit||Number||Yes||Maximum number of concurrent worker functions to invoke||
+||worker||Function||Yes||worker function to call, of the form `f(arg, cb)`||
+
+Events available are `drain`, `end` and `error`, which do the usual things.
