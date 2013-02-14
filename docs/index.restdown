@@ -41,6 +41,7 @@ The options that can be passed in at construct time:
 
 ||**Name**||**JS Type**||**Required**||**Description**||
 ||cache||Object||No||params to pass to [lru-cache](https://github.com/isaacs/node-lru-cache)||
+||checkInterval||Number||No||amount of milliseconds to wait between health checks||
 ||connectTimeout||Number||No||amount of milliseconds to wait for acquiring a socket to redis||
 ||host||String||Yes||IP/DNS name of redis host||
 ||log||Object||Yes||[bunyan](https://github.com/trentm/node-bunyan) logger||
