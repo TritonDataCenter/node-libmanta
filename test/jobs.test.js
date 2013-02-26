@@ -84,6 +84,8 @@ test('transform job', function (t) {
                 inputDone: true,
                 stats: {
                         errors: 6,
+                        outputs: 0,
+                        retries: 0,
                         tasks: 8,
                         tasksDone: 8
                 },
