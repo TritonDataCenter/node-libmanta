@@ -121,3 +121,25 @@ test('toString', function (t) {
                 ':6379>]');
         t.end();
 });
+
+
+test('set members', function (t) {
+        this.mahi.setMembers('uuid', function (err, uuids) {
+                t.ifError(err);
+                t.ok(uuids.length > 0);
+                t.end();
+        });
+});
+
+
+test('empty set or set not found', function (t) {
+        this.mahi.setMembers('a', function (err, uuids) {
+                t.ok(err);
+                t.notOk(uuids);
+                if (err) {
+                        t.equal(err.name, 'EmptySetError');
+                        t.ok(err.message);
+                }
+                t.end();
+        });
+});
