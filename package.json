@@ -12,7 +12,7 @@
                 "fash": "0.1.1",
                 "lru-cache": "2.3.0",
                 "node-uuid": "1.4.0",
-                "moray": "git+ssh://git@git.joyent.com:node-moray.git#1c0562b",
+                "moray": "git+ssh://git@git.joyent.com:node-moray.git#master",
                 "once": "1.1.1",
                 "restify": "2.4.1",
                 "redis": "0.8.3",
