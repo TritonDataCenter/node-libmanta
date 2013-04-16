@@ -46,9 +46,7 @@ function makeOpts(opts) {
                 _opts.contentMD5 = 'MHhkZWFkYmVlZg==';
                 _opts.contentType = 'text/plain';
                 _opts.sharks = [ {
-                        url: 'http://foo.bar.com',
-                        server_uuid: uuid(),
-                        zone_uuid: uuid()
+                        manta_storage_id: '1.stor.ring.test'
                 } ];
                 break;
 
