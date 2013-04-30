@@ -19,4 +19,7 @@ You'll need to define the morays you have for the index ring, as well as the
 address of where to find Mahi (redis); for example, assuming the bellingham
 lab (and you have DNS set appropriately):
 
-    INDEX_URLS=tcp://1.moray.bh1.joyent.us:2020,tcp://2.moray.bh1.joyent.us:2020 MAHI_HOST=auth.bh1.joyent.us make prepush
+```
+INDEX_URLS=tcp://1.moray.bh1.joyent.us:2020,tcp://2.moray.bh1.joyent.us:2020 \
+  MAHI_HOST=authcache.bh1.joyent.us make prepush
+```

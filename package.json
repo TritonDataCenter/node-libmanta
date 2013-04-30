@@ -7,12 +7,12 @@
         "main": "./lib/index.js",
         "dependencies": {
                 "assert-plus": "0.1.2",
-                "backoff": "2.0.0",
+                "backoff": "2.2.0",
                 "bunyan": "0.21.1",
                 "fash": "0.1.1",
                 "lru-cache": "2.3.0",
                 "node-uuid": "1.4.0",
-                "moray": "git+ssh://git@git.joyent.com:node-moray.git#6248cbe",
+                "moray": "git+ssh://git@git.joyent.com:node-moray.git#1c0562b",
                 "once": "1.1.1",
                 "restify": "2.4.1",
                 "redis": "0.8.3",
@@ -24,7 +24,7 @@
                 "nodeunit": "0.8.0"
         },
         "engines": {
-                "node": ">=0.8.18"
+                "node": ">=0.8.22"
         },
         "scripts": {
                 "test": "./node_modules/.bin/nodeunit test/*.test.js"

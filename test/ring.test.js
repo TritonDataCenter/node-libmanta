@@ -66,7 +66,10 @@ function makeOpts(opts) {
 ///--- Tests
 
 before(function (cb) {
+        var self = this;
+
         cb = once(cb);
+
         if (!process.env.INDEX_URLS) {
                 cb(new Error('INDEX_URLS=$1,$2,... must be specified'));
                 return;
@@ -89,19 +92,16 @@ before(function (cb) {
                 },
                 noReconnect: true
         });
+
         this.ring.once('error', cb);
         this.ring.once('ready', cb);
 });
 
 
 after(function (cb) {
-        if (!this.ring) {
-                cb();
-                return;
-        }
-
-        this.ring.once('close', cb);
-        this.ring.close();
+        if (this.ring)
+                this.ring.close();
+        cb();
 });
 
 
