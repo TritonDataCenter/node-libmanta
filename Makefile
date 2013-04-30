@@ -45,7 +45,7 @@ all: $(REPO_DEPS)
 CLEAN_FILES += node_modules
 
 .PHONY: test
-test: $(NODEUNIT)
+test: all
 	$(NODEUNIT) test/*.test.js
 
 include ./tools/mk/Makefile.deps
