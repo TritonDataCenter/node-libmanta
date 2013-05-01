@@ -70,31 +70,21 @@ before(function (cb) {
 
         cb = once(cb);
 
-        if (!process.env.INDEX_URLS) {
-                cb(new Error('INDEX_URLS=$1,$2,... must be specified'));
+        if (!process.env.ELECTRIC_MORAY) {
+                cb(new Error('ELECTRIC_MORAY must be specified'));
                 return;
         }
 
-        var urls = process.env.INDEX_URLS.split(',').filter(function (s) {
-                return (s && s.length > 0);
-        });
+        var electricMoray = process.env.ELECTRIC_MORAY;
 
-        this.ring = libmanta.createIndexRing({
+        this.ring = libmanta.createMorayClient({
                 log: helper.createLogger(),
-                replicas: 100,
-                urls: urls,
-                connectTimeout: 1000,
-                retry: {
-                        retries: 1,
-                        minTimeout: 1,
-                        maxTimeout: 10,
-                        factor: 1
-                },
-                noReconnect: true
+                host: electricMoray,
+                port: 2020
         });
 
         this.ring.once('error', cb);
-        this.ring.once('ready', cb);
+        this.ring.once('connect', cb);
 });
 
 
@@ -102,40 +92,6 @@ after(function (cb) {
         if (this.ring)
                 this.ring.close();
         cb();
-});
-
-
-test('getClientByKey matches getClient', function (t) {
-        var k = '/foo/bar/baz.txt';
-        var c1 = this.ring.getClientByKey(k);
-        t.ok(c1);
-        var c2 = this.ring.getClient('/foo/bar');
-        t.ok(c1);
-        t.ok(c2);
-        t.equal(c1.url, c2.url);
-        t.end();
-});
-
-
-test('ensure we still hash ok', function (t) {
-        var k = '/foo/bar/baz.txt';
-        var c1 = this.ring.getClientByKey(k);
-        t.ok(c1);
-        var c2 = this.ring.getClient('/foo/bar');
-        t.ok(c2);
-        t.equal(c1.url, c2.url);
-        t.end();
-});
-
-
-test('check for "root" directory', function (t) {
-        var k = '/ffa80dc0-bbf9-11e1-afa7-0800200c9a66/stor';
-        var c1 = this.ring.getClientByKey(k);
-        t.ok(c1);
-        var c2 = this.ring.getClient(k);
-        t.ok(c2);
-        t.equal(c1.url, c2.url);
-        t.end();
 });
 
 
