@@ -21,7 +21,7 @@ var test = helper.test;
 test('transform job', function (t) {
         var input = {
                 jobId: '9eff6942-8eea-4e87-b143-94f30c5a8f8e',
-                jobName: 'metering-storage-hourly-2013-02-12-20',
+                name: 'metering-storage-hourly-2013-02-12-20',
                 auth: {
                         login: 'poseidon',
                         uuid: '56f237ac-8cb0-4468-896f-5aa00ff8ffc9',
@@ -33,11 +33,11 @@ test('transform job', function (t) {
                 authToken: 'void *',
                 owner: '56f237ac-8cb0-4468-896f-5aa00ff8ffc9',
                 phases: [ {
-                        type: 'storage-map',
+                        type: 'map',
                         assets: [
-                                '/poseidon/stor/usage/assets/bin/storage-map',
+                                '/poseidon/stor/usage/assets/bin/map',
                                 '/poseidon/stor/usage/assets/lib/carrier.js',
-                                '/poseidon/stor/usage/assets/lib/storage-map.js'
+                                '/poseidon/stor/usage/assets/lib/map.js'
                         ],
                         exec: 'some command'
                 }, {
@@ -93,11 +93,11 @@ test('transform job', function (t) {
                 timeDone: '2013-02-13T01:24:54.829Z',
                 phases:
                 [ {
-                        type: 'storage-map',
+                        type: 'map',
                         assets: [
-                                '/poseidon/stor/usage/assets/bin/storage-map',
+                                '/poseidon/stor/usage/assets/bin/map',
                                 '/poseidon/stor/usage/assets/lib/carrier.js',
-                                '/poseidon/stor/usage/assets/lib/storage-map.js'
+                                '/poseidon/stor/usage/assets/lib/map.js'
                         ],
                         exec: 'some command'
                 }, {

@@ -66,8 +66,6 @@ function makeOpts(opts) {
 ///--- Tests
 
 before(function (cb) {
-        var self = this;
-
         cb = once(cb);
 
         if (!process.env.ELECTRIC_MORAY) {
