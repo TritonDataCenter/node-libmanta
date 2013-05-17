@@ -73,11 +73,42 @@ before(function (cb) {
                 return;
         }
 
-        var electricMoray = process.env.ELECTRIC_MORAY;
+        // Uncomment the lines below to test MANTA-1342,
+        // and make sure to change the "real" ring's "cb" to "_cb"
+        //
+        // var MAX = 5;
+        // var rings = [];
+
+        // var done = 0;
+        // var _err;
+        // function _cb(err) {
+        //         _err = err || _err;
+        //         if (++done === MAX+1) {
+        //                 rings.forEach(function (r) {
+        //                         r.close();
+        //                 });
+        //                 cb(_err);
+        //         }
+        // }
+
+        // for (var i = 0; i < 5; i++) {
+        //         var r = libmanta.createMorayClient({
+        //                 log: helper.createLogger(),
+        //                 host: process.env.ELECTRIC_MORAY,
+        //                 port: 2020
+        //         });
+        //         if (r) {
+        //                 rings.push(r);
+        //                 r.once('error', _cb);
+        //                 r.once('connect', _cb);
+        //         } else {
+        //                 process.nextTick(_cb);
+        //         }
+        // }
 
         this.ring = libmanta.createMorayClient({
                 log: helper.createLogger(),
-                host: electricMoray,
+                host: process.env.ELECTRIC_MORAY,
                 port: 2020
         });
 
@@ -139,6 +170,7 @@ test('putMetadata (directory) root', function (t) {
                 t.end();
         });
 });
+
 
 // Need resharding
 // test('add a node, and ensure we get an update', function (t) {
