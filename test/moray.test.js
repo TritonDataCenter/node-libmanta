@@ -1,7 +1,7 @@
 // Copyright (c) 2012, Joyent, Inc. All rights reserved.
 
 var once = require('once');
-var uuid = require('node-uuid');
+var libuuid = require('libuuid');
 
 var libmanta = require('../lib');
 
@@ -28,15 +28,15 @@ function makeKey(customer, path) {
 
 function makeOpts(opts) {
     opts = opts || {};
-    var id = opts.objectId || uuid();
-    var owner = opts.owner || uuid();
+    var id = opts.objectId || libuuid.create();
+    var owner = opts.owner || libuuid.create();
     var key = makeKey(owner, (opts.path || '/' + id));
 
     var _opts = {
         objectId: id,
         owner: owner,
         key: key,
-        requestId: uuid(),
+        requestId: libuuid.create(),
         type: opts.type || 'object'
     };
 
