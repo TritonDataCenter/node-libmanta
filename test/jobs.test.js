@@ -80,6 +80,7 @@ test('transform job', function (t) {
         id: '9eff6942-8eea-4e87-b143-94f30c5a8f8e',
         name: 'metering-storage-hourly-2013-02-12-20',
         state: 'done',
+        transient: false,
         cancelled: false,
         inputDone: true,
         stats: {
