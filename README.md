@@ -8,16 +8,11 @@
     Copyright (c) 2014, Joyent, Inc.
 -->
 
-# Joyent Engineering Guide
+# manta-wrasse
 
-Repository: <git@git.joyent.com:node-libmanta.git>
-Browsing: <https://mo.joyent.com/node-libmanta>
-Who: Mark Cavage
-Docs: <https://mo.joyent.com/docs/node-libmanta>
-Tickets/bugs: <https://devhub.joyent.com/jira/browse/MANTA>
-
-
-# Overview
+This repository is part of the Joyent Manta project.  For contribution
+guidelines, issues, and general documentation, visit the main
+[Manta](http://github.com/joyent/manta) project page.
 
 This repo serves to hold any/all common code that is shared between Manta
 components.  Currently a [mahi](https://mo.joyent.com/docs/mahi) client,
