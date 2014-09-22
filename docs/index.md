@@ -1,6 +1,6 @@
 ---
-title: libmanta
-markdown2extras: wiki-tables, code-friendly
+title: node-libmanta
+markdown2extras: tables, code-friendly
 apisections:
 ---
 <!--
@@ -13,10 +13,17 @@ apisections:
     Copyright (c) 2014, Joyent, Inc.
 -->
 
+# node-libmanta
+
+This repo serves to hold any/all common code that is shared between Manta
+components.
+
+
 # Mahi
 
-This package contains a node client for communicating with Mahi, which is the
-authentication/identity cache that Manta maintains in redis.
+This package contains a node client for communicating with
+[Mahi](https://github.com/joyent/mahi), which is the authentication/identity
+cache that Manta maintains in redis.
 
 ## createMahiClient(options)
 
@@ -48,17 +55,18 @@ client.
 
 The options that can be passed in at construct time:
 
-||**Name**||**JS Type**||**Required**||**Description**||
-||cache||Object||No||params to pass to [lru-cache](https://github.com/isaacs/node-lru-cache)||
-||checkInterval||Number||No||amount of milliseconds to wait between health checks||
-||connectTimeout||Number||No||amount of milliseconds to wait for acquiring a socket to redis||
-||host||String||Yes||IP/DNS name of redis host||
-||log||Object||Yes||[bunyan](https://github.com/trentm/node-bunyan) logger||
-||maxTimeout||Number||No||Maximum amount of time between retries||
-||minTimeout||Number||No||Minimum amount of time before first retry||
-||port||Number||No||Redis port||
-||redis_options||Object||No||params to pass to [node_redis](https://github.com/mranney/node_redis)||
-||retries||Number||No||Number of times to attempt establishing a connection||
+| Name           | JS Type | Required | Description                                                             |
+| -------------- | ------- | -------- | ----------------------------------------------------------------------- |
+| cache          | Object  | No       | params to pass to [lru-cache](https://github.com/isaacs/node-lru-cache) |
+| checkInterval  | Number  | No       | amount of milliseconds to wait between health checks                    |
+| connectTimeout | Number  | No       | amount of milliseconds to wait for acquiring a socket to redis          |
+| host           | String  | Yes      | IP/DNS name of redis host                                               |
+| log            | Object  | Yes      | [bunyan](https://github.com/trentm/node-bunyan) logger                  |
+| maxTimeout     | Number  | No       | Maximum amount of time between retries                                  |
+| minTimeout     | Number  | No       | Minimum amount of time before first retry                               |
+| port           | Number  | No       | Redis port                                                              |
+| redis_options  | Object  | No       | params to pass to [node_redis](https://github.com/mranney/node_redis)   |
+| retries        | Number  | No       | Number of times to attempt establishing a connection                    |
 
 
 ## mahi.userFromLogin(login, [opts], cb)
@@ -157,8 +165,9 @@ and then `close` it.  When you get an `end` event, you're done.
 
 Options that can be passed at construct time:
 
-||**Name**||**JS Type**||**Required**||**Description**||
-||limit||Number||Yes||Maximum number of concurrent worker functions to invoke||
-||worker||Function||Yes||worker function to call, of the form `f(arg, cb)`||
+| Name   | JS Type  | Required | Description                                             |
+| ------ | -------- | -------- | ------------------------------------------------------- |
+| limit  | Number   | Yes      | Maximum number of concurrent worker functions to invoke |
+| worker | Function | Yes      | worker function to call, of the form `f(arg, cb)`       |
 
 Events available are `drain`, `end` and `error`, which do the usual things.
