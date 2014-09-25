@@ -8,7 +8,7 @@
     Copyright (c) 2014, Joyent, Inc.
 -->
 
-# manta-wrasse
+# node-libmanta
 
 This repository is part of the Joyent Manta project.  For contribution
 guidelines, issues, and general documentation, visit the main
