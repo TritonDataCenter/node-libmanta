@@ -1,0 +1,34 @@
+#!/bin/bash
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+
+#
+# Copyright (c) 2015, Joyent, Inc.
+#
+
+#
+# manta-triggers-show: remove versioned trigger procedures on the "manta" Moray
+# bucket.  This will not work if those procedures are still in use.  See the
+# README.md file in the parent directory for details.
+#
+
+#
+# LIBMANTA_POSTGRES_HOST should denote an IP address or DNS name of a primary
+# Manatee peer.
+#
+if [[ -z "$LIBMANTA_POSTGRES_HOST" ]]; then
+	echo "LIBMANTA_POSTGRES_HOST must be set in the environment."
+	exit 2
+fi
+
+psql -h "$LIBMANTA_POSTGRES_HOST" -U moray moray <<EOF
+DROP FUNCTION IF EXISTS manta_update_versioned_trigger();
+DROP FUNCTION IF EXISTS count_manta_directories_v1();
+DROP FUNCTION IF EXISTS count_manta_directories_v2();
+DROP FUNCTION IF EXISTS count_manta_directories_v3();
+DROP FUNCTION IF EXISTS count_manta_directories_v4();
+DROP FUNCTION IF EXISTS count_manta_directories_v5();
+EOF

@@ -1,0 +1,124 @@
+#!/usr/bin/env node
+/* vim: set ft=javascript: */
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * Copyright (c) 2015, Joyent, Inc.
+ */
+
+/*
+ * manta-dircount-load: stress directory counts by creating and removing objects
+ * in a directory.  Unlike the stress-test version with a similar name, this one
+ * does not verify directory counts.
+ */
+
+var mod_bunyan = require('bunyan');
+var mod_cmdutil = require('cmdutil');
+var mod_manta = require('manta');
+var mod_stream = require('stream');
+var sprintf = require('extsprintf').sprintf;
+var VError = require('verror');
+
+var dcsConcurrency = 8;
+var dcsNobjects = 30;
+var dcsPath = '/poseidon/stor/MANTA-2720-3';
+var dcsObjectPrefix = 'dircountload.';
+var dcsClient;
+var dcsLog;
+var dcsNiterations;
+var dcsActualConcurrency = 0;
+var dcsConcurrencyHighWatermark = 0;
+
+var mod_http = require('http');
+var mod_https = require('https');
+
+function main()
+{
+    var i;
+
+    dcsLog = new mod_bunyan({
+        'name': 'dircountload',
+        'level': process.env['LOG_LEVEL'] || 'info'
+    });
+    dcsClient = mod_manta.createBinClient({ 'log': dcsLog });
+    /* Bad, Manta client! */
+    process.removeAllListeners('uncaughtException');
+    dcsNiterations = 0;
+
+    mod_http.globalAgent.maxSockets = 2 * dcsConcurrency;
+    mod_https.globalAgent.maxSockets = 2 * dcsConcurrency;
+
+    dcsClient.mkdirp(dcsPath, function (err) {
+        if (err) {
+            mod_cmdutil.fail(new VError(err, 'mkdirp "%s"', dcsPath));
+        }
+
+        for (i = 0; i < dcsConcurrency; i++) {
+            dcsLoopOne();
+        }
+
+        setInterval(report, 5000);
+    });
+}
+
+function dcsLoopOne()
+{
+    var objnum, objname, objpath, stream;
+    var start, end, ms;
+
+    dcsNiterations++;
+    objnum = Math.floor(Math.random() * dcsNobjects);
+    objname = sprintf('%s%04d', dcsObjectPrefix, objnum);
+    objpath = sprintf('%s/%s', dcsPath, objname);
+
+    start = process.hrtime();
+    dcsActualConcurrency++;
+    dcsConcurrencyHighWatermark =
+        Math.max(dcsActualConcurrency, dcsConcurrencyHighWatermark);
+
+    if (Math.floor(2 * Math.random()) === 0) {
+        dcsClient.unlink(objpath, function (err) {
+            --dcsActualConcurrency;
+
+            if (err && err.name != 'ResourceNotFoundError') {
+                mod_cmdutil.fail(new VError(
+                    err, 'unlink error (%s)', err.name));
+            }
+
+            end = process.hrtime(start);
+            ms = end[0] * 1000 + Math.round(end[1] / 1e6);
+            if (ms > 5000)
+                console.error('DEL latency: %dms', ms);
+            setImmediate(dcsLoopOne);
+        });
+    } else {
+        stream = new mod_stream.PassThrough();
+        dcsClient.put(objpath, stream, function (err) {
+            --dcsActualConcurrency;
+
+            if (err) {
+                mod_cmdutil.fail(new VError(err, 'put error (%s)', err.name));
+            }
+
+            end = process.hrtime(start);
+            ms = end[0] * 1000 + Math.round(end[1] / 1e6);
+            if (ms > 5000)
+                console.error('PUT latency: %dms', ms);
+            setImmediate(dcsLoopOne);
+        });
+
+        stream.end('dcs');
+    }
+}
+
+function report()
+{
+    console.error('%s: completed %d requests with apparent max concurrency %d',
+        new Date().toISOString(), dcsNiterations, dcsConcurrencyHighWatermark);
+}
+
+main();

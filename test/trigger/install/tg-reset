@@ -1,0 +1,38 @@
+#!/usr/bin/env node
+/* vim: set ft=javascript: */
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * Copyright (c) 2015, Joyent, Inc.
+ */
+
+/*
+ * tg-reset: Resets testing state to a blank slate.
+ */
+
+var mod_cmdutil = require('cmdutil');
+var common = require('./common');
+
+function main()
+{
+    var setup, client;
+
+    setup = common.setup();
+    client = setup.client;
+    client.on('connect', function () {
+        common.resetBucketState(client, function (err) {
+            if (err) {
+                mod_cmdutil.fail(err);
+            }
+
+            /* process exit */
+            client.close();
+        });
+    });
+}
+
+main();

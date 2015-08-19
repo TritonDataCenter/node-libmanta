@@ -1,0 +1,84 @@
+#!/usr/bin/env node
+/* vim: set ft=javascript: */
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * Copyright (c) 2015, Joyent, Inc.
+ */
+
+/*
+ * tg-install: Install version N of our test trigger.
+ */
+
+var mod_getopt = require('posix-getopt');
+var mod_cmdutil = require('cmdutil');
+var mod_vasync = require('vasync');
+var common = require('./common');
+
+function main()
+{
+    var version, v, setup, client;
+    var parser, option, concurrency;
+
+    concurrency = 1;
+    parser = new mod_getopt.BasicParser('c:', process.argv);
+    while ((option = parser.getopt()) !== undefined) {
+        switch (option.option) {
+        case 'c':
+            concurrency = parseInt(option.optarg, 10);
+            if (isNaN(concurrency) ||
+                concurrency.toString() != option.optarg) {
+                throw (new Error('bad value for -c'));
+            }
+            break;
+
+        default:
+            usage();
+            break;
+        }
+    }
+
+    if (parser.optind() != process.argv.length - 1) {
+        usage();
+    }
+
+    version = process.argv[parser.optind()];
+    v = parseInt(version, 10);
+    if (isNaN(v) || v.toString() != version)
+        throw (new Error('bad version (not an integer)'));
+
+    setup = common.setup();
+    client = setup.client;
+    client.on('connect', function () {
+        common.installTrigger({
+            'version': v,
+            'moray': client,
+            'concurrency': concurrency
+        }, function (err, results) {
+            results.operations.forEach(function (r) {
+                if (r.status == 'fail')
+                    mod_cmdutil.warn(r.err);
+                else
+                    r.result.forEach(function (ro) {
+                        console.log(ro);
+                    });
+            });
+
+            /* process exit */
+            client.close();
+        });
+    });
+}
+
+function usage()
+{
+    console.error('usage: %s %s [-c CONCURRENCY] VERSION',
+        process.argv[0], process.argv[1]);
+    process.exit(2);
+}
+
+main();

@@ -1,0 +1,70 @@
+#!/usr/bin/env node
+/* vim: set ft=javascript: */
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * Copyright (c) 2015, Joyent, Inc.
+ */
+
+/*
+ * tg-load: Create and remove lots of objects to stress-test the PostgreSQL
+ * trigger management functions.
+ */
+
+var mod_assert = require('assert');
+var mod_cmdutil = require('cmdutil');
+var mod_vasync = require('vasync');
+var common = require('./common');
+
+var lStresser = null;
+var lClient = null;
+
+function main()
+{
+    var setup, log, client;
+
+    setup = common.setup();
+    log = setup.log;
+    client = lClient = setup.client;
+    client.on('connect', function () {
+        lStresser = new common.TriggerStressTester({
+            'log': log,
+            'client': client,
+            'concurrency': 100,
+            'bucket': common.tableData,
+            'objPrefix': 'obj',
+            'nobjects': 5000,
+            'allowConflicts': false
+        });
+
+        lStresser.start();
+    });
+
+    process.on('SIGINT', stop);
+    process.on('SIGUSR2', report);
+}
+
+function stop()
+{
+    console.error('stopping...');
+    lStresser.stop(function onStopped() {
+        lClient.close();
+        report();
+    });
+}
+
+function report()
+{
+    if (lStresser === null)
+        return;
+
+    var stats = lStresser.stats();
+    console.error('%d inserted, %d deleted',
+        stats.ninserted, stats.ndeleted);
+}
+
+main();

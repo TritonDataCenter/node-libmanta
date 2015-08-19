@@ -5,7 +5,7 @@
 #
 
 #
-# Copyright (c) 2014, Joyent, Inc.
+# Copyright (c) 2015, Joyent, Inc.
 #
 
 #
@@ -32,8 +32,14 @@ NPM_EXEC	:= npm
 #
 # Files
 #
+BASH_FILES	 = test/trigger/manta/manta-triggers-show
+BASH_FILES	+= test/trigger/manta/manta-triggers-reset
 DOC_FILES	 = index.md
 JS_FILES	:= $(shell find lib test -name '*.js')
+JS_FILES	+= $(wildcard test/trigger/install/tg-*)
+JS_FILES	+= test/trigger/manta/manta-dircount-stress
+JS_FILES	+= test/trigger/manta/manta-dircount-load
+JSON_FILES	 = package.json
 JSL_CONF_NODE	 = tools/jsl.node.conf
 JSL_FILES_NODE   = $(JS_FILES)
 JSSTYLE_FILES	 = $(JS_FILES)

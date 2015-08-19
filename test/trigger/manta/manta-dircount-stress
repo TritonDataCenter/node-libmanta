@@ -1,0 +1,231 @@
+#!/usr/bin/env node
+/* vim: set ft=javascript: */
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * Copyright (c) 2015, Joyent, Inc.
+ */
+
+/*
+ * manta-dircount-stress: directory count stress test.  This program cycles
+ * between removing all objects in a target directory and creating them all
+ * again and then checking the directory's count.
+ */
+
+var mod_bunyan = require('bunyan');
+var mod_cmdutil = require('cmdutil');
+var mod_jsprim = require('jsprim');
+var mod_lstream = require('lstream');
+var mod_manta = require('manta');
+var mod_stream = require('stream');
+var mod_vasync = require('vasync');
+var sprintf = require('extsprintf').sprintf;
+var VError = require('verror');
+
+var dcsConcurrency = 150;
+var dcsNobjects = 4000;
+var dcsPath = '/poseidon/stor/MANTA-2720-4';
+var dcsObjectPrefix = 'dircountstress.';
+var dcsClient;
+var dcsLog;
+var dcsQueue;
+var dcsNiterations;
+
+function main()
+{
+    dcsLog = new mod_bunyan({ 'name': 'dircountstress' });
+    dcsClient = mod_manta.createBinClient({ 'log': dcsLog });
+    /* Bad, Manta client! */
+    process.removeAllListeners('uncaughtException');
+    dcsQueue = mod_vasync.queue(dcsWork, dcsConcurrency);
+    dcsNiterations = 0;
+    dcsRun();
+}
+
+/*
+ * For generality, we use the queue purely to manage concurrency of arbitrary
+ * functions.  That is, we push functions onto the queue.  All the worker does
+ * is call that function, passing the queue callback as an argument.
+ */
+function dcsWork(funcarg, queuecb)
+{
+    funcarg(queuecb);
+}
+
+/*
+ * Runs a sequence that wipes a directory, checks that it's empty, populates it,
+ * and checks that it's full.  Upon completion, starts over again.
+ */
+function dcsRun()
+{
+    mod_vasync.waterfall([
+        dcsWipe,
+        function dcsCheckEmpty(callback) {
+        dcsCheckSize(0, callback);
+        },
+        dcsPopulate,
+        function dcsCheckFull(callback) {
+        dcsCheckSize(dcsNobjects, callback);
+        }
+    ], function (err) {
+        if (err) {
+            mod_cmdutil.fail(err);
+        }
+
+        dcsNiterations++;
+        console.log('%d cycles complete', dcsNiterations);
+        dcsRun();
+    });
+}
+
+/*
+ * Remove all objects under "dcsPath".  It's assumed that there are no
+ * directories under that path, and that all objects are named according to this
+ * program's naming scheme.  This hopefully avoids doing damage if someone
+ * points us at a directory that contains anything other than our own test
+ * objects.
+ */
+function dcsWipe(callback)
+{
+    var basedir = dcsPath;
+    var barrier = mod_vasync.barrier();
+
+    console.log('wiping "%s" (at %s)', basedir, new Date().toISOString());
+    dcsClient.ls(basedir, function (err, res) {
+        if (err) {
+            mod_cmdutil.fail(err);
+        }
+
+        barrier = mod_vasync.barrier();
+        barrier.start('/((listing))');
+        barrier.on('drain', function () { callback(); });
+
+        res.on('directory', function (dir) {
+            mod_cmdutil.fail(
+                new VError('unexpected directory: "%s/%s"',
+                     basedir, dir.name));
+        });
+
+        res.on('object', function (obj) {
+            var path = sprintf('%s/%s', basedir, obj.name);
+            if (!mod_jsprim.startsWith(obj.name, dcsObjectPrefix)) {
+                mod_cmdutil.fail(new VError(
+                    'unexpected object: "%s"', path));
+            }
+
+            barrier.start(obj.name);
+            dcsQueue.push(function (queuecb) {
+                dcsClient.unlink(path, function (err2) {
+                    if (err2) {
+                        mod_cmdutil.fail(
+                            new VError(err2,
+                            'munlink "%s"', path));
+                    }
+
+                    queuecb();
+                    barrier.done(obj.name);
+                });
+            });
+        });
+
+        res.on('end', function () {
+            barrier.done('/((listing))');
+        });
+    });
+}
+
+/*
+ * Checks that the size of the "dcsPath" directory matches its count, and that
+ * it matches "count".
+ */
+function dcsCheckSize(nexpected, callback)
+{
+    var basedir = dcsPath;
+    dcsClient.ls(basedir, function (err, res) {
+        var nreported, nfound;
+
+        if (err) {
+            mod_cmdutil.fail(new VError(
+                err, 'fetch dir "%s"', basedir));
+        }
+
+        nfound = 0;
+        res.on('directory', function (dir) {
+            mod_cmdutil.fail(new VError('unexpected dir: "%s/%s"',
+                basedir, dir.name));
+        });
+
+        res.on('object', function (obj) {
+            nfound++;
+        });
+
+        res.on('end', function (response) {
+            nreported = parseInt(
+                response.headers['result-set-size'], 10);
+
+            if (nexpected != nreported || nexpected != nfound) {
+                console.log('error identified at %s',
+                    new Date().toISOString());
+                mod_cmdutil.fail(new VError(
+                    'directory "%s": expected %d, reported ' +
+                    '%d, found %d', basedir, nexpected,
+                    nreported, nfound));
+            }
+
+            console.log('expected, reported, and found %d entries',
+                nexpected);
+            callback();
+        });
+    });
+}
+
+/*
+ * Populates the "dcsPath" directory with "dcsNobjects" objects.
+ */
+function dcsPopulate(callback)
+{
+    var barrier = mod_vasync.barrier();
+    var objnames, i;
+
+    console.log('populating "%s"', dcsPath);
+
+    /*
+     * It's irritating to construct this whole array in memory, but we need
+     * to have this many distinct objects in order to name the Manta objects
+     * differently.
+     */
+    objnames = new Array(dcsNobjects);
+    for (i = 0; i < dcsNobjects; i++) {
+        objnames[i] = sprintf('%s%04d', dcsObjectPrefix, i);
+    }
+
+    objnames.forEach(function (objname) {
+        barrier.start(objname);
+        dcsQueue.push(function (queuecb) {
+            var stream, path;
+
+            stream = new mod_stream.PassThrough();
+            path = sprintf('%s/%s', dcsPath, objname);
+
+            dcsClient.put(path, stream, function (err) {
+                if (err) {
+                    mod_cmdutil.fail(new VError(err,
+                        'put "%s"', path));
+                }
+
+                barrier.done(objname);
+                queuecb();
+            });
+
+            stream.end('dcs');
+        });
+    });
+
+    barrier.on('drain', function () { callback(); });
+}
+
+main();

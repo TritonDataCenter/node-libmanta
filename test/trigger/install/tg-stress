@@ -1,0 +1,175 @@
+#!/usr/bin/env node
+/* vim: set ft=javascript: */
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * Copyright (c) 2015, Joyent, Inc.
+ */
+
+/*
+ * tg-stress: Create and remove lots of objects _while_ periodically updating
+ * triggers in order to stress-test the PostgreSQL trigger management
+ * functions.
+ */
+
+var mod_assertplus = require('assert-plus');
+var mod_cmdutil = require('cmdutil');
+var mod_jsprim = require('jsprim');
+var mod_vasync = require('vasync');
+var common = require('./common');
+var VError = require('verror');
+
+var lStresser = null;
+var lClient = null;
+var lLastTriggerVersion = 1;                    /* initial trigger version */
+var lMaxTriggerVersion = 1;                     /* max version so far */
+var lFinalTriggerVersion = common.maxVersions;  /* final version trigger */
+var lTriggerCount = 0;                          /* count of trigger updates */
+var lTimeBetweenTriggerUpdates = 5 * 1000;      /* milliseconds */
+var lTimeout = null;
+var lStopped = false;
+var lConcurrency = 20;
+
+function main()
+{
+    var setup, log, client;
+
+    setup = common.setup();
+    log = setup.log;
+    client = lClient = setup.client;
+    client.on('connect', function () {
+        mod_vasync.waterfall([
+            function resetTestWorld(callback) {
+                console.log('%s: resetting bucket', new Date().toISOString());
+                common.resetBucketState(client, callback);
+            },
+
+            function installTrigger1(callback) {
+                console.log('%s: installing trigger v1',
+                    new Date().toISOString());
+                common.installTrigger({
+                    'log': log,
+                    'moray': client,
+                    'version': 1,
+                    'concurrency': 1
+                }, callback);
+            }
+        ], function (err) {
+            if (err) {
+                mod_cmdutil.fail(err);
+            }
+
+            console.log('%s: beginning stress test', new Date().toISOString());
+            lStresser = new common.TriggerStressTester({
+                'log': log,
+                'client': client,
+                'concurrency': 100,
+                'bucket': common.tableData,
+                'objPrefix': 'obj',
+                'nobjects': 5000,
+                'allowConflicts': false
+            });
+
+            lStresser.start();
+
+            lTimeout = setTimeout(tick, lTimeBetweenTriggerUpdates);
+        });
+    });
+
+    process.on('SIGINT', stop);
+    process.on('SIGUSR2', report);
+}
+
+function stop()
+{
+    console.error('stopping...');
+    lStopped = true;
+    if (lTimeout !== null) {
+        clearTimeout(lTimeout);
+        lTimeout = null;
+    }
+    lStresser.stop(function onStopped() {
+        report();
+        lastCheck();
+    });
+}
+
+function report()
+{
+    if (lStresser === null)
+        return;
+
+    var stats = lStresser.stats();
+    console.error('%s: %d inserted, %d deleted (net %d)',
+        new Date().toISOString(), stats.ninserted, stats.ndeleted,
+        stats.ninserted - stats.ndeleted);
+}
+
+function tick()
+{
+    var nextversion;
+
+    lTimeout = null;
+
+    /*
+     * Alternate between trying an older version and a newer version.
+     */
+    if (lTriggerCount++ % 2 === 0) {
+        nextversion = lMaxTriggerVersion + 1;
+        lMaxTriggerVersion = nextversion;
+    } else {
+        nextversion = Math.floor(
+            Math.random() * (lMaxTriggerVersion - 1)) + 1;
+    }
+
+    report();
+    console.log('%s: trigger update from %s to %s',
+        new Date().toISOString(), lLastTriggerVersion,
+        nextversion);
+    common.installTrigger({
+        'moray': lClient,
+        'concurrency': lConcurrency,
+        'version': nextversion
+    }, function (err, results) {
+        if (results.nerrors == lConcurrency) {
+            mod_cmdutil.fail(new VError(
+                err, 'all trigger updates failed'));
+        } else {
+            console.log('%s: trigger updated (%d failures)',
+                new Date().toISOString(), results.nerrors);
+        }
+
+        if (lStopped)
+            return;
+
+        if (nextversion < lFinalTriggerVersion)
+            lTimeout = setTimeout(tick, lTimeBetweenTriggerUpdates);
+        else
+            stop();
+    });
+}
+
+function lastCheck()
+{
+        common.fetchState(lClient, function (err, t) {
+            if (!err && !t.tg_consistent) {
+                err = new VError('counts not consistent!');
+            }
+
+            if (err) {
+                err = new VError(err, 'final check');
+                mod_cmdutil.fail(err);
+            }
+
+            /* process exit */
+            console.log('%s: final counts consistent',
+                new Date().toISOString());
+            lClient.close();
+        });
+}
+
+main();

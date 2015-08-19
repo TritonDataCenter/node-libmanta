@@ -1,0 +1,205 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * Copyright (c) 2015, Joyent, Inc.
+ */
+
+/*
+ * NOTE: SQL-style to-end-of-line comments (starting with two hyphens) are NOT
+ * supported in this file due to MORAY-317.  Use multiline C-style comments.
+ */
+
+/*
+ * PostgreSQL trigger management
+ *
+ * When database setup (and upgrade) is automated, and triggers are in use, it's
+ * useful to be able to apply version numbers to triggers.  That way, new
+ * versions of setup software can identify when a trigger needs to be updated
+ * and apply the update, and (importantly) avoid modifying a trigger
+ * configuration when no update is required.  This is particularly important
+ * because trigger changes take exclusive locks on whole tables, which can be
+ * extremely disruptive.
+ *
+ * This function provides a mechanism for managing triggers with version
+ * numbers.  You call this function with arguments:
+ *
+ *     tg_tablename     table name
+ *
+ *     tg_trigname      name of the trigger
+ *
+ *     tg_version       the version of the trigger you want to install
+ *     			(a non-negative integer)
+ *
+ *     tg_procname      the name of the procedure to execute for the trigger
+ *                      (a version string will be appended to this value to
+ *                      construct the actual name, and you must have already
+ *                      defined an appropriately-named function)
+ *
+ * This function assumes that the trigger should be executed for each row on
+ * INSERT or DELETE.  This could conceivably be generalized, but it's all we
+ * need here.
+ *
+ * The idea is that in the initial version of a trigger, you would define a
+ * function my_trigger_proc_v1, and you would use this function like so:
+ *
+ *     CREATE OR REPLACE FUNCTION my_trigger_proc_v1() RETURNS TRIGGER AS
+ *     ...
+ *     LANGUAGE plpgsql;
+ *
+ *     SELECT manta_update_versioned_trigger("my_table", "my_trigger",
+ *         1, "my_trigger_proc");
+ *
+ * This operation will create a trigger called "my_trigger" on "my_table" that
+ * executes user-defined procedure "my_trigger_proc_v1()".  Note that the
+ * procedure name is constructed by appending "_v" plus the version number to
+ * the value you pass in for "tg_procname".  Your trigger name can be anything,
+ * but for clarity it's recommended to name it similarly to the procedure name.
+ *
+ * If you execute this block again (e.g., because the same database-setup
+ * program runs again), then no changes will be applied to the database.  The
+ * function checks for the presence of the trigger at version 1 and sees that
+ * nothing needs to be done.
+ *
+ * When you want to change the body of the trigger, you change the software to
+ * define a new function called "my_trigger_proc_v2" and call this function
+ * again, like this:
+ *
+ *     CREATE OR REPLACE FUNCTION my_trigger_proc_v2() RETURNS TRIGGER AS
+ *     ...
+ *     LANGUAGE plpgsql;
+ *
+ *     SELECT manta_update_versioned_trigger("my_table", "my_trigger",
+ *         2, "my_trigger_proc");
+ *
+ * This time, this function will see that version 1 is installed and remove that
+ * trigger first (using DROP TRIGGER).  Then it will create the new trigger at
+ * version 2.
+ *
+ * At this point, if the previous version of the code runs (i.e., the one that
+ * defines "my_trigger_v1"), it will see that a newer trigger is installed and
+ * make no changes.
+ * 
+ *
+ * CONCURRENCY: The execution of this function necessarily happens in the
+ * context of a transaction.  If there was no BEGIN to start a transaction
+ * block, then one is implicitly created at the top-level statement that calls
+ * this function.  See
+ * http://www.postgresql.org/docs/9.2/static/tutorial-transactions.html for
+ * details.  The fact that this function is always invoked inside a transaction
+ * is critical for two reasons:
+ *
+ *     1. to avoid windows in which neither the old trigger nor the new trigger
+ *        is active
+ *
+ *     2. to avoid failure modes where old triggers were removed, but new
+ *        triggers were not successfully added (as could happen if the function
+ *        is executed concurrently from multiple transactions)
+ *
+ * If this function is invoked concurrently by multiple versions, this function
+ * guarantees that:
+ *
+ *     o Exactly one trigger will be in effect before, during, and after all the
+ *       invocations.
+ *
+ *     o At no point before, during, or after all the invocations will a newer
+ *       trigger (i.e., a trigger with a larger "version" value) be replaced
+ *       with an older trigger.
+ *
+ * However, it is NOT guaranteed that all of the function invocations will
+ * succeed.  It's recommended that caller repeat the operation until the
+ * transaction completes successfully.  This is guaranteed to happen eventually
+ * because a conflict can only occur when a transaction successfully updates the
+ * version installed, and there's an upper bound to the number of versions that
+ * can be installed.
+ *
+ *
+ * IMPLEMENTATION NOTE: It would be preferable to embed the version number in
+ * the name of the trigger, rather than the name of the procedure, because the
+ * procedure name is not part of trigger metadata per se.  (The implementation
+ * pulls the trigger name out of the procedure name embedded inside the
+ * trigger's SQL statement, which is unfortunate.)  However, this mechanism is
+ * intended to work with an older mechanism that unconditionally drops and
+ * recreates the trigger, so the trigger name must be constant across versions
+ * in order to avoid duplicate triggers ever existing.
+ */
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION manta_update_versioned_trigger (
+    tg_tablename varchar(128),
+    tg_trigname  varchar(128),
+    tg_version   int,
+    tg_procname  varchar(128))
+    RETURNS VARCHAR(128)
+    AS
+    $FUNCTION_CODE$
+    BEGIN /* function definition, NOT transaction */
+
+	/*
+	 * We want to log what we're doing, and those messages are sometimes
+	 * greater than 80 columns.  Due to MORAY-317, we cannot use string
+	 * concatenation.  Due to the definition of RAISE, the string we log
+	 * must be a literal anyway.  We could use EXECUTE to dynamically
+	 * generate the command, but RAISE is specific to pl/pgSQL, not SQL per
+	 * se, so we'd have to wrap it in a DO block.  Ugh.  Sometimes, we just
+	 * can't have nice things.
+	 */
+	RAISE NOTICE '% trigger "%" on table "%" (want version %)',
+	    'manta_update_versioned_trigger: checking state for',
+	    tg_trigname, tg_tablename, tg_version;
+
+	/*
+	 * If there are matching triggers whose version number (encoded in the
+	 * procedure name, in turn encoded in the trigger's action statement) is
+	 * newer than ours, then we don't have to do anything.  Locking is not
+	 * necessary here, since the presence of any triggers as new as ours at
+	 * any time means that we have no work to do.  Moreover, it's critical
+	 * that we do NOT lock here, because doing so is extremely disruptive,
+	 * and we only want to require locking when changes are actually likely
+	 * to be made.
+	 */
+	IF EXISTS (SELECT *
+	           FROM  information_schema.triggers
+		   WHERE event_object_table = tg_tablename AND
+		         trigger_name = tg_trigname AND
+		         action_statement ~
+		           ('EXECUTE PROCEDURE ' || tg_procname || '_v\d+\(\)$')
+			 AND substring(action_statement
+			   from '_v(\d+)\(\)$')::integer >= tg_version)
+	THEN
+		RAISE NOTICE 
+		    'manta_update_versioned_trigger: no changes needed';
+	        RETURN 'no changes needed';
+	END IF;
+
+	/*
+	 * If there is an older trigger, remove it now.
+	 */
+	RAISE NOTICE '% "%" on table "%"',
+	    'manta_update_versioned_trigger: removing previous trigger',
+	    tg_trigname, tg_tablename;
+	EXECUTE 'DROP TRIGGER IF EXISTS ' || quote_ident(tg_trigname) ||
+	    ' ON ' || quote_ident(tg_tablename);
+
+	/*
+	 * Instantiate the new trigger.  The only way this should be able to
+	 * fail if some other invocation created this trigger after we removed
+	 * it above.  The caller is expected to retry until this succeeds.
+	 */
+	RAISE NOTICE '% trigger "%" on table "%" at version %',
+	    'manta_update_versioned_trigger: installing',
+	    tg_trigname, tg_tablename, tg_version;
+	EXECUTE 'CREATE TRIGGER ' || quote_ident(tg_trigname)  ||
+	    ' AFTER INSERT OR DELETE ON ' || quote_ident(tg_tablename) ||
+	    ' FOR EACH ROW EXECUTE PROCEDURE ' ||
+	    quote_ident(tg_procname) || '_v' || tg_version || '()';
+
+	RETURN 'installed version ' || tg_version;
+    END;  /* function definition */
+    $FUNCTION_CODE$ LANGUAGE plpgsql;
+
+COMMIT;

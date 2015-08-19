@@ -1,0 +1,75 @@
+#!/usr/bin/env node
+/* vim: set ft=javascript: */
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * Copyright (c) 2015, Joyent, Inc.
+ */
+
+/*
+ * tg-show: Shows all the state in the testing buckets.
+ */
+
+var mod_cmdutil = require('cmdutil');
+var mod_vasync = require('vasync');
+var common = require('./common');
+
+function main()
+{
+    var setup, client;
+
+    setup = common.setup();
+    client = setup.client;
+    client.on('connect', function () {
+        common.fetchState(client, function (err, t) {
+            if (err) {
+                mod_cmdutil.fail(err);
+            }
+
+            console.log('buckets found: %s',
+                t.tg_buckets.length === 0 ? 'NONE' :
+                t.tg_buckets.join(', '));
+
+            console.log('procedures found: %s\n',
+                t.tg_funcs.length === 0 ? 'NONE' :
+                t.tg_funcs.join(', '));
+
+            if (t.tg_triggers.length > 0) {
+                console.log('triggers found:\n');
+                t.tg_triggers.forEach(function (tg) {
+                    console.log('    table "%s", trigger "%s" on ' +
+                        '"%s"\n        %s',
+                        tg.tgr_table, tg.tgr_name, tg.tgr_event, tg.tgr_action);
+                });
+                console.log('');
+            } else {
+                console.log('triggers found: NONE');
+            }
+
+            console.log('data records: %d', t.tg_nobjects);
+            console.log('count summary: ');
+            t.tg_counts.forEach(function (v) {
+                console.log('    version %d: %d inserts, ' +
+                    '%d deletes (net %d)', v.tgc_version,
+                    v.tgc_ninserted, v.tgc_ndeleted, v.tgc_net);
+            });
+
+            console.log('sum of per-version net counts: %d', t.tg_vcount);
+            console.log('global net count: %d', t.tg_gcount);
+
+            if (!t.tg_consistent) {
+                console.error('ERROR: counts are inconsistent!');
+                process.exit(1);
+            }
+
+            /* process exit */
+            client.close();
+        });
+    });
+}
+
+main();

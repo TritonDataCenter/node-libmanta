@@ -1,0 +1,87 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * Copyright (c) 2015, Joyent, Inc.
+ */
+
+/*
+ * NOTE: SQL-style to-end-of-line comments (starting with two hyphens) are NOT
+ * supported in this file due to MORAY-317.  Use multiline C-style comments.
+ *
+ * NOTE: If you update this function in any way, you MUST update the version
+ * number encoded in the name, as well as the version number in the call to
+ * manta_update_versioned_trigger() below.
+ */
+
+/*
+ * Defines version N of this trigger.  This code is executed any time we check
+ * to see if we need to update the trigger.  It's possible that no version is
+ * installed, an older version is installed, a newer version is installed, or
+ * this exact version is already installed.
+ *
+ * If this script is executed concurrently by multiple clients, it's possible
+ * for this operation to fail with a "tuple concurrently modified" error.  This
+ * is annoying, but not easy to work around:
+ *
+ *     o We cannot DROP the function instead (even inside a transaction) because
+ *       it may be in use by an existing trigger.
+ *     o We cannot DROP the trigger along with it, even if we recreate it inside
+ *       a transaction, because that operation takes an exclusive table lock and
+ *       it's critical that we not do that unless we actually need to update the
+ *       trigger.)
+ *     o There is no CREATE FUNCTION IF NOT EXISTS.
+ *
+ * Sadly, the easiest thing to do is to have the caller retry on this error
+ * until it succeeds.  The assumption is that as long as the number of clients
+ * is bounded, and all clients are retrying, then eventually all will succeed
+ * because each time the error is returned, one of the clients has succeeded.
+ */
+CREATE OR REPLACE FUNCTION count_manta_directories_v2() RETURNS TRIGGER AS
+    $FunctionCode$
+    DECLARE tmpcount NUMERIC;
+    BEGIN
+        IF TG_OP = 'INSERT' THEN
+            IF EXISTS (SELECT entries FROM manta_directory_counts WHERE _key = NEW.dirname) THEN
+                UPDATE
+                    manta_directory_counts
+                SET
+                    entries = entries + 1
+                WHERE
+                    _key = NEW.dirname;
+            ELSE
+                INSERT INTO manta_directory_counts
+                  (_key, _value, _etag, _vnode, entries)
+                VALUES
+                  (NEW.dirname, '{}', '_trigger', NEW._vnode, 1);
+            END IF;
+        ELSIF TG_OP = 'DELETE' THEN
+            tmpcount := (SELECT entries FROM manta_directory_counts WHERE _key = OLD.dirname);
+            IF (tmpcount <= 1) THEN
+                DELETE FROM
+                    manta_directory_counts
+                WHERE
+                    _key = OLD.dirname;
+            ELSE
+                UPDATE
+                    manta_directory_counts
+                SET
+                    entries = entries - 1
+                WHERE
+                    _key = OLD.dirname;
+            END IF;
+        END IF;
+        RETURN NULL;
+    END; 
+$FunctionCode$ LANGUAGE plpgsql;
+
+/*
+ * Transactionally install this trigger.
+ */
+BEGIN;
+SELECT manta_update_versioned_trigger(
+    'manta', 'count_directories', 2, 'count_manta_directories');
+COMMIT;

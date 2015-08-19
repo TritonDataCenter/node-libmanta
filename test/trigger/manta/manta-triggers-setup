@@ -1,0 +1,39 @@
+#!/usr/bin/env node
+
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * Copyright (c) 2015, Joyent, Inc.
+ */
+
+/*
+ * manta-triggers-setup: this program instantiates a node-libmanta client, which
+ * itself applies the trigger update process.
+ */
+
+var libmanta = require('../../../lib');
+
+if (require.cache[__dirname + 'test/helper.js'])
+    delete require.cache[__dirname + 'test/helper.js'];
+var helper = require('../../helper.js');
+
+var ring;
+
+if (!process.env.ELECTRIC_MORAY_HOST) {
+    throw (new Error('ELECTRIC_MORAY_HOST must be specified'));
+    return;
+}
+
+ring = libmanta.createMorayClient({
+    log: helper.createLogger(),
+    host: process.env.ELECTRIC_MORAY_HOST,
+    port: 2020
+});
+
+ring.once('connect', function () {
+    ring.close();
+});

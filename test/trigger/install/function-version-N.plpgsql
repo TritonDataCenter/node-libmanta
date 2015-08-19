@@ -1,0 +1,95 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * Copyright (c) 2015, Joyent, Inc.
+ */
+
+/*
+ * NOTE: SQL-style to-end-of-line comments (starting with two hyphens) are NOT
+ * supported in this file due to MORAY-317.  Use multiline C-style comments.
+ */
+
+/*
+ * Defines version N of this trigger.  This code is executed any time we check
+ * to see if we need to update the trigger.  It's possible that no version is
+ * installed, an older version is installed, a newer version is installed, or
+ * this exact version is already installed.
+ *
+ * If this script is executed concurrently by multiple clients, it's possible
+ * for this operation to fail with a "tuple concurrently modified" error.  This
+ * is annoying, but not easy to work around:
+ *
+ *     o We cannot DROP the function instead (even inside a transaction) because
+ *       it may be in use by an existing trigger.
+ *     o We cannot DROP the trigger along with it, even if we recreate it inside
+ *       a transaction, because that operation takes an exclusive table lock and
+ *       it's critical that we not do that unless we actually need to update the
+ *       trigger.)
+ *     o There is no CREATE FUNCTION IF NOT EXISTS.
+ *
+ * Sadly, the easiest thing to do is to have the caller retry on this error
+ * until it succeeds.  The assumption is that as long as the number of clients
+ * is bounded, and all clients are retrying, then eventually all will succeed
+ * because each time the error is returned, one of the clients has succeeded.
+ */
+CREATE OR REPLACE FUNCTION test_count_vNNNN() RETURNS TRIGGER AS 
+	$FunctionCode$ 
+	BEGIN	/* begin function definition */
+
+		/*
+		 * Make sure there's a global count record.
+		 */
+		BEGIN
+			INSERT INTO trigger_stress_counts
+			    (_key, _value, _etag, version, ninserts, ndeletes)
+			    VALUES
+			    ('all counts', '{}', 'etag', -1, 0, 0);
+		EXCEPTION
+			WHEN unique_violation THEN NULL;
+		END;
+
+		/*
+		 * Make sure there's a per-version count record.
+		 */
+		BEGIN
+			INSERT INTO trigger_stress_counts
+			    (_key, _value, _etag, version, ninserts, ndeletes)
+			    VALUES
+			    ('version ' || NNNN, '{}', 'etag', NNNN, 0, 0);
+		EXCEPTION
+			WHEN unique_violation THEN NULL;
+		END;
+
+		/*
+		 * Update both the per-version and global records.  We always
+		 * update the global one first to control the order and avoid
+		 * the possibility of deadlock.
+		 */
+		IF TG_OP = 'INSERT' THEN
+			UPDATE trigger_stress_counts
+			SET    ninserts = ninserts + 1
+			WHERE  version = -1;
+
+			UPDATE trigger_stress_counts
+			SET    ninserts = ninserts + 1
+			WHERE  version = NNNN;
+		ELSE
+			UPDATE trigger_stress_counts
+			SET    ndeletes = ndeletes + 1
+			WHERE  version = -1;
+
+			UPDATE trigger_stress_counts
+			SET    ndeletes = ndeletes + 1
+			WHERE  version = NNNN;
+		END IF;
+
+		RETURN NULL;
+	END;	/* end function definition */
+	$FunctionCode$ LANGUAGE plpgsql;
+
+SELECT manta_update_versioned_trigger(
+    'trigger_stress_data', 'test_count', NNNN, 'test_count');
