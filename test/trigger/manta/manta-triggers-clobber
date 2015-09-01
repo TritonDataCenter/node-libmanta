@@ -1,0 +1,37 @@
+#!/bin/bash
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+
+#
+# Copyright (c) 2015, Joyent, Inc.
+#
+
+#
+# manta-triggers-clobber: explicitly set the Manta triggers to version N.  This
+# overrides the normal mechanism for only updating if needed.
+#
+
+#
+# LIBMANTA_POSTGRES_HOST should denote an IP address or DNS name of a primary
+# Manatee peer.
+#
+if [[ -z "$LIBMANTA_POSTGRES_HOST" ]]; then
+	echo "LIBMANTA_POSTGRES_HOST must be set in the environment."
+	exit 2
+fi
+
+if [[ -z "$1" ]] || ! [[ "$1" =~ ^[0-9]+$ ]]; then
+	echo "usage: $0 VERSION"
+	exit 2
+fi
+
+psql -h "$LIBMANTA_POSTGRES_HOST" -U moray moray <<EOF
+BEGIN;
+DROP TRIGGER IF EXISTS count_directories on manta;
+CREATE TRIGGER count_directories AFTER INSERT OR DELETE ON manta
+    FOR EACH ROW EXECUTE PROCEDURE count_manta_directories_v$1();
+COMMIT;
+EOF

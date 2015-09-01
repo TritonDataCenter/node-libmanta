@@ -124,6 +124,11 @@ the "manta" directory:
   jobsupervisor or muskie instance), and _then_ run this command.
 * `manta-triggers-setup`: applies the Manta trigger update process, by just
   instantiating a node-libmanta client and then closing it.
+* `manta-triggers-clobber VERSION`: forcefully sets the Manta triggers to
+  pre-existing version N.  This overrides the normal mechanism, which updates
+  triggers only if the new version is actually newer.  This is useful during
+  testing to rollback a version of the trigger that you added during
+  development.
 
 
 ## Testing trigger correctness
@@ -137,6 +142,9 @@ To verify this, there are a few tools provided in the "manta" directory:
   fills it with a predefiend number of objects with some concurrency.  This
   cycle repeats.  Each time the directory becomes full or empty, the reported
   count is compared to the actual number and the expected number.  If these do
-  not match, the directory count has become incorrect.
+  not match, the directory count has become incorrect.  Note that in order to
+  test more edge cases, some inserts are made during the "wipe" phase, and some
+  deletes are made during the "populate" phase, but they're bounded so that each
+  phase converges.
 * `manta-dircount-load`: similar to the "stress" version, but only creates and
   removes objects without actually verifying the directory counts.

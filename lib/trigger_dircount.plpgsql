@@ -40,26 +40,65 @@
  * is bounded, and all clients are retrying, then eventually all will succeed
  * because each time the error is returned, one of the clients has succeeded.
  */
-CREATE OR REPLACE FUNCTION count_manta_directories_v2() RETURNS TRIGGER AS
+CREATE OR REPLACE FUNCTION count_manta_directories_v3() RETURNS TRIGGER AS
     $FunctionCode$
     DECLARE tmpcount NUMERIC;
+    DECLARE niters NUMERIC;
     BEGIN
+
         IF TG_OP = 'INSERT' THEN
-            IF EXISTS (SELECT entries FROM manta_directory_counts WHERE _key = NEW.dirname) THEN
-                UPDATE
-                    manta_directory_counts
+            /*
+             * This operation is a textbook UPSERT: we must update a record if
+             * it exists or insert a record if not.  While modern PostgreSQL
+             * versions have good support for UPSERT operations, we're targeting
+             * version 9.2, which does not.  To deal with this, we use the
+             * approach suggested in the "Trapping Errors" section of the
+             * pl/pgSQL documentation, which is based on a loop.  But we bound
+             * the loop to ensure that a bug in this code does not cause queries
+             * to hang indefinitely.
+             */
+            FOR niters IN 1..50 LOOP
+                /*
+                 * We first try to bump the counter for this directory.  If
+                 * there is no record for the counter, then this query will
+                 * succeed but update zero rows.  The special boolean variable
+                 * FOUND indicates whether any rows were matched.
+                 */
+                UPDATE manta_directory_counts
                 SET
                     entries = entries + 1
                 WHERE
                     _key = NEW.dirname;
-            ELSE
-                INSERT INTO manta_directory_counts
-                  (_key, _value, _etag, _vnode, entries)
-                VALUES
-                  (NEW.dirname, '{}', '_trigger', NEW._vnode, 1);
-            END IF;
-        ELSIF TG_OP = 'DELETE' THEN
-            tmpcount := (SELECT entries FROM manta_directory_counts WHERE _key = OLD.dirname);
+
+                IF FOUND THEN
+                    RAISE NOTICE 'count_manta_..._v3(): AFTER INSERT, USING UPDATE (after % tries)', niters;
+                    RETURN NULL;
+                END IF;
+
+                /*
+                 * The row was not present.  Now try to insert it.  If that
+                 * works, we're done.
+                 */
+                BEGIN
+                    INSERT INTO manta_directory_counts
+                        (_key, _value, _etag, _vnode, entries)
+                    VALUES
+                        (NEW.dirname, '{}', '_trigger', NEW._vnode, 1);
+                    RAISE NOTICE 'count_manta_..._v3(): AFTER INSERT, USING INSERT (after % tries)', niters;
+                    RETURN NULL;
+                EXCEPTION WHEN unique_violation THEN
+                    /*
+                     * We've raced with another operation.  Go to the top of the
+                     * loop to try again.
+                     */
+                END;
+            END LOOP;
+
+            RAISE EXCEPTION 'count_manta_directories_v3() looped too many times';
+        ELSE
+            /* TG_OP = 'DELETE' */
+            tmpcount := (SELECT entries FROM manta_directory_counts
+                WHERE _key = OLD.dirname FOR UPDATE);
             IF (tmpcount <= 1) THEN
                 DELETE FROM
                     manta_directory_counts
@@ -73,9 +112,9 @@ CREATE OR REPLACE FUNCTION count_manta_directories_v2() RETURNS TRIGGER AS
                 WHERE
                     _key = OLD.dirname;
             END IF;
+            RETURN NULL;
         END IF;
-        RETURN NULL;
-    END; 
+    END;
 $FunctionCode$ LANGUAGE plpgsql;
 
 /*
@@ -83,5 +122,5 @@ $FunctionCode$ LANGUAGE plpgsql;
  */
 BEGIN;
 SELECT manta_update_versioned_trigger(
-    'manta', 'count_directories', 2, 'count_manta_directories');
+    'manta', 'count_directories', 3, 'count_manta_directories');
 COMMIT;
