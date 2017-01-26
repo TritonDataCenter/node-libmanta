@@ -7,7 +7,7 @@
  */
 
 /*
- * Copyright (c) 2015, Joyent, Inc.
+ * Copyright (c) 2017, Joyent, Inc.
  */
 
 /*
@@ -30,8 +30,9 @@ if (!process.env.ELECTRIC_MORAY_HOST) {
 
 ring = libmanta.createMorayClient({
     log: helper.createLogger(),
-    host: process.env.ELECTRIC_MORAY_HOST,
-    port: 2020
+    morayOptions: {
+        srvDomain: process.env.ELECTRIC_MORAY_HOST
+    }
 });
 
 ring.once('connect', function () {
