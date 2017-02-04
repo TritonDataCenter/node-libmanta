@@ -5,7 +5,7 @@
  */
 
 /*
- * Copyright (c) 2014, Joyent, Inc.
+ * Copyright (c) 2017, Joyent, Inc.
  */
 
 var once = require('once');
@@ -116,8 +116,9 @@ before(function (cb) {
 
     this.ring = libmanta.createMorayClient({
         log: helper.createLogger(),
-        host: process.env.ELECTRIC_MORAY,
-        port: 2020
+        morayOptions: {
+            srvDomain: process.env.ELECTRIC_MORAY
+        }
     });
 
     this.ring.once('error', cb);
