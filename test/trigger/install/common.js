@@ -5,7 +5,7 @@
  */
 
 /*
- * Copyright (c) 2015, Joyent, Inc.
+ * Copyright (c) 2017, Joyent, Inc.
  */
 
 /*
@@ -66,9 +66,8 @@ function setup()
         'log': log,
         'host': host,
         'port': port,
-        'connectTimeout': 3000,
-        'retry': null,
-        'reconnect': false
+        'failFast': true,
+        'unwrapErrors': true
     });
 
     return ({
