@@ -10,6 +10,7 @@
 
 var bunyan = require('bunyan');
 var once = require('once');
+var libuuid = require('libuuid');
 
 
 
@@ -26,7 +27,48 @@ function createLogger(name, stream) {
     return (log);
 }
 
+///--- Helpers
 
+function makeKey(customer, path) {
+    return ('/' + customer + '/stor' + (path || ''));
+}
+
+
+function makeOpts(opts) {
+    opts = opts || {};
+    var id = opts.objectId || libuuid.create();
+    var owner = opts.owner || libuuid.create();
+    var key = makeKey(owner, (opts.path || '/' + id));
+
+    var _opts = {
+        objectId: id,
+        owner: owner,
+        key: key,
+        requestId: libuuid.create(),
+        type: opts.type || 'object'
+    };
+
+    switch (_opts.type) {
+    case 'object':
+        _opts.contentLength = Math.floor(Math.random() * 1025);
+        _opts.contentMD5 = 'MHhkZWFkYmVlZg==';
+        _opts.contentType = 'text/plain';
+        _opts.sharks = [ {
+            manta_storage_id: '1.stor.ring.test'
+        } ];
+        break;
+
+    case 'link':
+        _opts.link = makeOpts();
+        break;
+
+    default:
+        break;
+    }
+
+    return (_opts);
+
+}
 
 ///--- Exports
 
@@ -64,5 +106,7 @@ module.exports = {
         };
     },
 
-    createLogger: createLogger
+    createLogger: createLogger,
+
+    makeOpts: makeOpts
 };
