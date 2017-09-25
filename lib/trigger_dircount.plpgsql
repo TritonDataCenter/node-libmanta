@@ -22,24 +22,27 @@
  * to see if we need to update the trigger.  It's possible that no version is
  * installed, an older version is installed, a newer version is installed, or
  * this exact version is already installed.
- *
- * If this script is executed concurrently by multiple clients, it's possible
- * for this operation to fail with a "tuple concurrently modified" error.  This
- * is annoying, but not easy to work around:
- *
- *     o We cannot DROP the function instead (even inside a transaction) because
- *       it may be in use by an existing trigger.
- *     o We cannot DROP the trigger along with it, even if we recreate it inside
- *       a transaction, because that operation takes an exclusive table lock and
- *       it's critical that we not do that unless we actually need to update the
- *       trigger.)
- *     o There is no CREATE FUNCTION IF NOT EXISTS.
- *
- * Sadly, the easiest thing to do is to have the caller retry on this error
- * until it succeeds.  The assumption is that as long as the number of clients
- * is bounded, and all clients are retrying, then eventually all will succeed
- * because each time the error is returned, one of the clients has succeeded.
  */
+
+BEGIN;
+
+/*
+ * Use a transaction advisory lock to prevent errors that result from
+ * concurrent execution of a CREATE FUNCTION statement. The lock is
+ * automatically released at the end of the transaction.
+ *
+ * The lock key must be an integer so take an md5 hash of the function
+ * name and convert the bytes to an integer value. This should prevent
+ * different function creation statements from using the same key and
+ * ensure each invocation of this statement does use the same key.
+ */
+WITH digest AS (
+    SELECT md5('count_manta_directories_v3') AS val
+), lockkey AS (
+    SELECT ('x'||(SELECT val FROM digest))::bit(64)::bigint AS val
+)
+SELECT pg_advisory_xact_lock((SELECT val FROM lockkey));
+
 CREATE OR REPLACE FUNCTION count_manta_directories_v3() RETURNS TRIGGER AS
     $FunctionCode$
     DECLARE tmpcount NUMERIC;
@@ -116,6 +119,8 @@ CREATE OR REPLACE FUNCTION count_manta_directories_v3() RETURNS TRIGGER AS
         END IF;
     END;
 $FunctionCode$ LANGUAGE plpgsql;
+
+COMMIT;
 
 /*
  * Transactionally install this trigger.

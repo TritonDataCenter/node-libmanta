@@ -32,7 +32,7 @@
  *     tg_trigname      name of the trigger
  *
  *     tg_version       the version of the trigger you want to install
- *     			(a non-negative integer)
+ *                      (a non-negative integer)
  *
  *     tg_procname      the name of the procedure to execute for the trigger
  *                      (a version string will be appended to this value to
@@ -82,7 +82,7 @@
  * At this point, if the previous version of the code runs (i.e., the one that
  * defines "my_trigger_v1"), it will see that a newer trigger is installed and
  * make no changes.
- * 
+ *
  *
  * CONCURRENCY: The execution of this function necessarily happens in the
  * context of a transaction.  If there was no BEGIN to start a transaction
@@ -129,6 +129,24 @@
 
 BEGIN;
 
+/*
+ * Use a transaction advisory lock to prevent errors that result from
+ * concurrent execution of a CREATE FUNCTION statement. The lock is
+ * automatically released at the end of the transaction.
+ *
+ * The lock key must be an integer so take an md5 hash of the function
+ * name and convert the bytes to an integer value. This should prevent
+ * different function creation statements from using the same key and
+ * ensure each invocation of this statement does use the same key.
+ */
+WITH digest AS (
+    SELECT md5('manta_update_versioned_trigger') AS val
+), lockkey AS (
+    SELECT ('x'||(SELECT val FROM digest))::bit(64)::bigint AS val
+)
+SELECT pg_advisory_xact_lock((SELECT val FROM lockkey));
+
+
 CREATE OR REPLACE FUNCTION manta_update_versioned_trigger (
     tg_tablename varchar(128),
     tg_trigname  varchar(128),
@@ -139,66 +157,66 @@ CREATE OR REPLACE FUNCTION manta_update_versioned_trigger (
     $FUNCTION_CODE$
     BEGIN /* function definition, NOT transaction */
 
-	/*
-	 * We want to log what we're doing, and those messages are sometimes
-	 * greater than 80 columns.  Due to MORAY-317, we cannot use string
-	 * concatenation.  Due to the definition of RAISE, the string we log
-	 * must be a literal anyway.  We could use EXECUTE to dynamically
-	 * generate the command, but RAISE is specific to pl/pgSQL, not SQL per
-	 * se, so we'd have to wrap it in a DO block.  Ugh.  Sometimes, we just
-	 * can't have nice things.
-	 */
-	RAISE NOTICE '% trigger "%" on table "%" (want version %)',
-	    'manta_update_versioned_trigger: checking state for',
-	    tg_trigname, tg_tablename, tg_version;
+        /*
+         * We want to log what we're doing, and those messages are sometimes
+         * greater than 80 columns.  Due to MORAY-317, we cannot use string
+         * concatenation.  Due to the definition of RAISE, the string we log
+         * must be a literal anyway.  We could use EXECUTE to dynamically
+         * generate the command, but RAISE is specific to pl/pgSQL, not SQL per
+         * se, so we'd have to wrap it in a DO block.  Ugh.  Sometimes, we just
+         * can't have nice things.
+         */
+        RAISE NOTICE '% trigger "%" on table "%" (want version %)',
+            'manta_update_versioned_trigger: checking state for',
+            tg_trigname, tg_tablename, tg_version;
 
-	/*
-	 * If there are matching triggers whose version number (encoded in the
-	 * procedure name, in turn encoded in the trigger's action statement) is
-	 * newer than ours, then we don't have to do anything.  Locking is not
-	 * necessary here, since the presence of any triggers as new as ours at
-	 * any time means that we have no work to do.  Moreover, it's critical
-	 * that we do NOT lock here, because doing so is extremely disruptive,
-	 * and we only want to require locking when changes are actually likely
-	 * to be made.
-	 */
-	IF EXISTS (SELECT *
-	           FROM  information_schema.triggers
-		   WHERE event_object_table = tg_tablename AND
-		         trigger_name = tg_trigname AND
-		         action_statement ~
-		           ('EXECUTE PROCEDURE ' || tg_procname || '_v\d+\(\)$')
-			 AND substring(action_statement
-			   from '_v(\d+)\(\)$')::integer >= tg_version)
-	THEN
-		RAISE NOTICE 
-		    'manta_update_versioned_trigger: no changes needed';
-	        RETURN 'no changes needed';
-	END IF;
+        /*
+         * If there are matching triggers whose version number (encoded in the
+         * procedure name, in turn encoded in the trigger's action statement) is
+         * newer than ours, then we don't have to do anything.  Locking is not
+         * necessary here, since the presence of any triggers as new as ours at
+         * any time means that we have no work to do.  Moreover, it's critical
+         * that we do NOT lock here, because doing so is extremely disruptive,
+         * and we only want to require locking when changes are actually likely
+         * to be made.
+         */
+        IF EXISTS (SELECT *
+                   FROM  information_schema.triggers
+                   WHERE event_object_table = tg_tablename AND
+                         trigger_name = tg_trigname AND
+                         action_statement ~
+                           ('EXECUTE PROCEDURE ' || tg_procname || '_v\d+\(\)$')
+                         AND substring(action_statement
+                           from '_v(\d+)\(\)$')::integer >= tg_version)
+        THEN
+                RAISE NOTICE
+                    'manta_update_versioned_trigger: no changes needed';
+                RETURN 'no changes needed';
+        END IF;
 
-	/*
-	 * If there is an older trigger, remove it now.
-	 */
-	RAISE NOTICE '% "%" on table "%"',
-	    'manta_update_versioned_trigger: removing previous trigger',
-	    tg_trigname, tg_tablename;
-	EXECUTE 'DROP TRIGGER IF EXISTS ' || quote_ident(tg_trigname) ||
-	    ' ON ' || quote_ident(tg_tablename);
+        /*
+         * If there is an older trigger, remove it now.
+         */
+        RAISE NOTICE '% "%" on table "%"',
+            'manta_update_versioned_trigger: removing previous trigger',
+            tg_trigname, tg_tablename;
+        EXECUTE 'DROP TRIGGER IF EXISTS ' || quote_ident(tg_trigname) ||
+            ' ON ' || quote_ident(tg_tablename);
 
-	/*
-	 * Instantiate the new trigger.  The only way this should be able to
-	 * fail if some other invocation created this trigger after we removed
-	 * it above.  The caller is expected to retry until this succeeds.
-	 */
-	RAISE NOTICE '% trigger "%" on table "%" at version %',
-	    'manta_update_versioned_trigger: installing',
-	    tg_trigname, tg_tablename, tg_version;
-	EXECUTE 'CREATE TRIGGER ' || quote_ident(tg_trigname)  ||
-	    ' AFTER INSERT OR DELETE ON ' || quote_ident(tg_tablename) ||
-	    ' FOR EACH ROW EXECUTE PROCEDURE ' ||
-	    quote_ident(tg_procname) || '_v' || tg_version || '()';
+        /*
+         * Instantiate the new trigger.  The only way this should be able to
+         * fail if some other invocation created this trigger after we removed
+         * it above.  The caller is expected to retry until this succeeds.
+         */
+        RAISE NOTICE '% trigger "%" on table "%" at version %',
+            'manta_update_versioned_trigger: installing',
+            tg_trigname, tg_tablename, tg_version;
+        EXECUTE 'CREATE TRIGGER ' || quote_ident(tg_trigname)  ||
+            ' AFTER INSERT OR DELETE ON ' || quote_ident(tg_tablename) ||
+            ' FOR EACH ROW EXECUTE PROCEDURE ' ||
+            quote_ident(tg_procname) || '_v' || tg_version || '()';
 
-	RETURN 'installed version ' || tg_version;
+        RETURN 'installed version ' || tg_version;
     END;  /* function definition */
     $FUNCTION_CODE$ LANGUAGE plpgsql;
 
