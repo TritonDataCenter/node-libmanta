@@ -134,15 +134,14 @@ BEGIN;
  * concurrent execution of a CREATE FUNCTION statement. The lock is
  * automatically released at the end of the transaction.
  *
- * Two keys are used for the lock to carve out a unique
- * namespace. Each key must be a 32-bit integer. The first key is derived
- * from the project name and the second key is derived from the
- * function name. An MD5 hash of each string is taken and the bytes
- * are converted to an integer value. This hopefully avoids the
- * case where multiple applications inadvertently use the same set of
- * keys and also the case where different function creation statements
- * use the same key while also ensuring each invocation of this
- * statement does use the same key.
+ * Two keys are used for the lock to carve out a unique namespace. Each key
+ * must be a 32-bit integer. The first key is derived from the project name and
+ * the second key is derived from the function name. An MD5 hash of each string
+ * is taken and the bytes are converted to an integer value. This hopefully
+ * avoids the case where multiple applications inadvertently use the same set
+ * of keys and also the case where different function creation statements use
+ * the same key while also ensuring each invocation of this statement does use
+ * the same key.
  */
 WITH digest1 AS (
     SELECT md5('libmanta') AS val
@@ -153,7 +152,10 @@ WITH digest1 AS (
 ), lockkey2 AS (
     SELECT ('x'||(SELECT val FROM digest2))::bit(32)::integer AS val
 )
-SELECT pg_advisory_xact_lock((SELECT val FROM lockkey1), (SELECT val FROM lockkey2));
+SELECT pg_advisory_xact_lock(
+    (SELECT val FROM lockkey1),
+    (SELECT val FROM lockkey2)
+);
 
 CREATE OR REPLACE FUNCTION manta_update_versioned_trigger (
     tg_tablename varchar(128),
