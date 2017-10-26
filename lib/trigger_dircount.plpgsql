@@ -22,24 +22,38 @@
  * to see if we need to update the trigger.  It's possible that no version is
  * installed, an older version is installed, a newer version is installed, or
  * this exact version is already installed.
- *
- * If this script is executed concurrently by multiple clients, it's possible
- * for this operation to fail with a "tuple concurrently modified" error.  This
- * is annoying, but not easy to work around:
- *
- *     o We cannot DROP the function instead (even inside a transaction) because
- *       it may be in use by an existing trigger.
- *     o We cannot DROP the trigger along with it, even if we recreate it inside
- *       a transaction, because that operation takes an exclusive table lock and
- *       it's critical that we not do that unless we actually need to update the
- *       trigger.)
- *     o There is no CREATE FUNCTION IF NOT EXISTS.
- *
- * Sadly, the easiest thing to do is to have the caller retry on this error
- * until it succeeds.  The assumption is that as long as the number of clients
- * is bounded, and all clients are retrying, then eventually all will succeed
- * because each time the error is returned, one of the clients has succeeded.
  */
+
+BEGIN;
+
+/*
+ * Use a transaction advisory lock to prevent errors that result from
+ * concurrent execution of a CREATE FUNCTION statement. The lock is
+ * automatically released at the end of the transaction.
+ *
+ * Two keys are used for the lock to carve out a unique namespace. Each key
+ * must be a 32-bit integer. The first key is derived from the project name and
+ * the second key is derived from the function name. An MD5 hash of each string
+ * is taken and the bytes are converted to an integer value. This hopefully
+ * avoids the case where multiple applications inadvertently use the same set
+ * of keys and also the case where different function creation statements use
+ * the same key while also ensuring each invocation of this statement does use
+ * the same key.
+ */
+WITH digest1 AS (
+    SELECT md5('libmanta') AS val
+), digest2 AS (
+    SELECT md5('count_manta_directories_v3') AS val
+), lockkey1 AS (
+    SELECT ('x'||(SELECT val FROM digest1))::bit(32)::integer AS val
+), lockkey2 AS (
+    SELECT ('x'||(SELECT val FROM digest2))::bit(32)::integer AS val
+)
+SELECT pg_advisory_xact_lock(
+    (SELECT val FROM lockkey1),
+    (SELECT val FROM lockkey2)
+);
+
 CREATE OR REPLACE FUNCTION count_manta_directories_v3() RETURNS TRIGGER AS
     $FunctionCode$
     DECLARE tmpcount NUMERIC;
@@ -116,6 +130,8 @@ CREATE OR REPLACE FUNCTION count_manta_directories_v3() RETURNS TRIGGER AS
         END IF;
     END;
 $FunctionCode$ LANGUAGE plpgsql;
+
+COMMIT;
 
 /*
  * Transactionally install this trigger.
