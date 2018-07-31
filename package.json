@@ -20,7 +20,7 @@
         "restify": "2.6.3",
         "redis": "0.10.1",
         "vasync": "1.6.3",
-        "verror": "1.6.0",
+        "verror": "^1.10.0",
         "xtend": "2.1.2"
     },
     "devDependencies": {
