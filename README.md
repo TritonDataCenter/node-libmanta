@@ -32,3 +32,22 @@ $ export ELECTRIC_MORAY=electric-moray.emy-10.joyent.us
 $ export MAHI_HOST=authcache.emy-10.joyent.us
 $ make prepush
 ```
+
+# Release process
+
+Manta components that use libmanta should use versions published to npm.
+To release a new libmanta:
+
+1. Make a commit to set the intended version in "package.json#version".
+
+2. Get that commit approved and merged via <https://cr.joyent.us>, as with all
+   commits to this repo. See the discussion of contribution at the top of this
+   readme.
+
+3. Once that is merged and you've updated your local copy, run:
+
+    ```
+    make cutarelease
+    ```
+
+   This will ensure a clean working copy, git tag, and npm publish.
