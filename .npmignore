@@ -1,0 +1,10 @@
+/.gitmodules
+/.dir-locals.el
+/Makefile
+/deps
+/docs
+/test
+/tools
+/tmp
+/npm-debug.log
+/libmanta-*.tgz
