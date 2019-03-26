@@ -28,7 +28,7 @@
         "libuuid": "0.1.2",
         "lstream": "0.0.4",
         "manta": "1.5.2",
-        "nodeunit": "0.8.4",
+        "nodeunit": "0.9.1",
         "posix-getopt": "1.2.0"
     },
     "engines": {
