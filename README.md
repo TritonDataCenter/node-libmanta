@@ -5,7 +5,7 @@
 -->
 
 <!--
-    Copyright (c) 2014, Joyent, Inc.
+    Copyright 2019 Joyent, Inc.
 -->
 
 # node-libmanta
@@ -40,9 +40,7 @@ To release a new libmanta:
 
 1. Make a commit to set the intended version in "package.json#version".
 
-2. Get that commit approved and merged via <https://cr.joyent.us>, as with all
-   commits to this repo. See the discussion of contribution at the top of this
-   readme.
+2. Get that commit approved and merged via a pull request.
 
 3. Once that is merged and you've updated your local copy, run:
 
