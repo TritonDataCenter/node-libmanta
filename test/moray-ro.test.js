@@ -9,7 +9,7 @@
  */
 
 var once = require('once');
-var uuidv4 = require('uuidv4');
+var uuidv4 = require('uuid/v4');
 var vasync = require('vasync');
 
 var libmanta = require('../lib');
