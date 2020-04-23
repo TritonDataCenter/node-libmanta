@@ -1,7 +1,7 @@
 {
     "name": "libmanta",
     "description": "common functions et al for manta services",
-    "version": "1.4.1",
+    "version": "1.4.2",
     "author": "Joyent (joyent.com)",
     "main": "./lib/index.js",
     "repository": {
