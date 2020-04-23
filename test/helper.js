@@ -5,12 +5,12 @@
  */
 
 /*
- * Copyright (c) 2014, Joyent, Inc.
+ * Copyright 2020 Joyent, Inc.
  */
 
 var bunyan = require('bunyan');
 var once = require('once');
-var libuuid = require('libuuid');
+var uuidv4 = require('uuid/v4');
 
 
 
@@ -36,15 +36,15 @@ function makeKey(customer, path) {
 
 function makeOpts(opts) {
     opts = opts || {};
-    var id = opts.objectId || libuuid.create();
-    var owner = opts.owner || libuuid.create();
+    var id = opts.objectId || uuidv4();
+    var owner = opts.owner || uuidv4();
     var key = makeKey(owner, (opts.path || '/' + id));
 
     var _opts = {
         objectId: id,
         owner: owner,
         key: key,
-        requestId: libuuid.create(),
+        requestId: uuidv4(),
         type: opts.type || 'object'
     };
 

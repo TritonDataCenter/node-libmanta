@@ -5,11 +5,11 @@
  */
 
 /*
- * Copyright (c) 2017, Joyent, Inc.
+ * Copyright 2020 Joyent, Inc.
  */
 
 var once = require('once');
-var libuuid = require('libuuid');
+var uuidv4 = require('uuid/v4');
 var vasync = require('vasync');
 
 var libmanta = require('../lib');
@@ -138,7 +138,7 @@ test('getMetadata: read-only client', function (t) {
     this.ring.putMetadata(pOpts, function (err, md) {
         var opts = {
             key: pOpts.key,
-            requestId: libuuid.create()
+            requestId: uuidv4()
         };
         roRing.getMetadata(opts, function (err2, md2) {
             t.ifError(err2);
