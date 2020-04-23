@@ -1,7 +1,7 @@
 {
     "name": "libmanta",
     "description": "common functions et al for manta services",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "author": "Joyent (joyent.com)",
     "main": "./lib/index.js",
     "repository": {
@@ -25,11 +25,11 @@
     "devDependencies": {
         "cmdutil": "0.1.0",
         "extsprintf": "1.3.0",
-        "libuuid": "0.2.1",
         "lstream": "0.0.4",
         "manta": "5.2.1",
         "nodeunit": "0.9.1",
-        "posix-getopt": "1.2.0"
+        "posix-getopt": "1.2.0",
+        "uuid": "~3.4.0"
     },
     "engines": {
         "node": ">=0.10.48"
