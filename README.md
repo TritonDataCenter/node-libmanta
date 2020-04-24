@@ -5,7 +5,7 @@
 -->
 
 <!--
-    Copyright 2019 Joyent, Inc.
+    Copyright 2020 Joyent, Inc.
 -->
 
 # node-libmanta
@@ -35,17 +35,19 @@ $ make prepush
 
 # Release process
 
-Manta components that use libmanta should use versions published to npm.
+Manta components that use libmanta should use versions tagged in git via:
+
+    "libmanta": "git+https://github.com/joyent/node-libmanta.git#v1.2.3"
+
 To release a new libmanta:
 
-1. Make a commit to set the intended version in "package.json#version".
+1. Make one or more commits that include **updating the package.json "version"
+   field**.
 
-2. Get that commit approved and merged via a pull request.
+2. Get that commit approved and integrated via a **pull request**.
 
-3. Once that is merged and you've updated your local copy, run:
+3. Update your local copy and run **`make cutarelease`** to git tag and push.
 
-    ```
-    make cutarelease
-    ```
-
-   This will ensure a clean working copy, git tag, and npm publish.
+(Note: Some earlier version of libmanta were published to npm. That practice
+is deprecated for this module because "libmanta" isn't a generally useful
+module that has a place in the npm registry.
