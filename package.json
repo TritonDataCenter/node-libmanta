@@ -1,8 +1,8 @@
 {
     "name": "libmanta",
     "description": "common functions et al for manta services",
-    "version": "1.4.4",
-    "author": "Joyent (joyent.com)",
+    "version": "1.4.5",
+    "author": "Edgecast Cloud (edgecast.io)",
     "main": "./lib/index.js",
     "repository": {
         "type": "git",
